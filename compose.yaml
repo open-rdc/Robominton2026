@@ -1,0 +1,26 @@
+name: robominton2026-foxy
+services:
+  foxy:
+    image: robominton2026-foxy:dev
+    build:
+      context: .
+      dockerfile: docker/foxy/Dockerfile
+      args:
+        DEV_UID: ${LOCAL_UID:-1000}
+        DEV_GID: ${LOCAL_GID:-1000}
+    working_dir: /ws
+    environment:
+      ROS_DOMAIN_ID: "${FOXY_ROS_DOMAIN_ID:-87}"
+      ROS_LOCALHOST_ONLY: "1"
+    stdin_open: true
+    tty: true
+    init: true
+    volumes:
+      - .:/ws/src/Robominton2026
+      - foxy_build:/ws/build
+      - foxy_install:/ws/install
+      - foxy_log:/ws/log
+volumes:
+  foxy_build:
+  foxy_install:
+  foxy_log:

@@ -1,0 +1,31 @@
+# Geometry is also passed to Xacro by sim.launch.py to avoid mismatched wheels.
+base_sim:
+  ros__parameters:
+    wheelbase: 0.52
+    track: 0.48
+    wheel_radius: 0.09
+    initial_x: 1.0
+    initial_y: 0.0
+    max_speed: 1.5
+    max_yaw_rate: 1.5
+    acceleration: 2.0
+    yaw_acceleration: 3.0
+    command_timeout: 0.3
+    update_rate: 100.0
+goal_follower:
+  ros__parameters:
+    gain: 1.2
+    max_speed: 1.0
+scene_sim:
+  ros__parameters:
+    serve_period: 4.0
+    shuttle_drag: 0.12
+    shuttle_radius: 0.035
+    racket_restitution: 0.8
+    # Racket dimensions are passed to both scene_sim and URDF by launch.
+    racket_pivot_x: 0.05
+    racket_pivot_y: -0.36
+    racket_pivot_z: 1.05  # base_footprint frame
+    racket_reach: 0.62
+    racket_radius: 0.14
+    racket_thickness: 0.015

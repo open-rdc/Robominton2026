@@ -1,0 +1,12 @@
+# Optional Linux/X11 display connection. Used by scripts/foxy.sh gui.
+services:
+  foxy:
+    environment:
+      DISPLAY: ${DISPLAY:?DISPLAY must be set on the host}
+      XAUTHORITY: /tmp/robominton.xauth
+      QT_QPA_PLATFORM: xcb
+      QT_X11_NO_MITSHM: "1"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - ${FOXY_XAUTHORITY:?Use scripts/foxy.sh gui}:/tmp/robominton.xauth:ro

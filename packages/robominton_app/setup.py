@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'Robominton2026'
+package_name = 'robominton_app'
 
 setup(
     name=package_name,
