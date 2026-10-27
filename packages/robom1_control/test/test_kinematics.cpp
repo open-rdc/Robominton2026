@@ -31,3 +31,18 @@ TEST(Odometry, BodyTranslationAndCircularMotion)
   integrate(x, y, yaw, 1, 0, 1, pi / 2);
   EXPECT_NEAR(x, 1, 1e-10); EXPECT_NEAR(y, 1, 1e-10);
 }
+
+TEST(Swerve, WheelLimitsScaleTheCompleteBodyTwist)
+{
+  const double scale = drive_scale(2.0, -1.0, 2.0, 0.68, 0.64, 0.12, 8.0);
+  EXPECT_GT(scale, 0); EXPECT_LT(scale, 1);
+  double largest = 0;
+  for (double x : {-0.34, 0.34}) {
+    for (double y : {-0.32, 0.32}) {
+      auto wheel = inverse(2*scale, -scale, 2*scale, x, y, 0.12, 0);
+      largest = std::max(largest, std::abs(wheel.velocity));
+    }
+  }
+  EXPECT_NEAR(largest, 8.0, 1e-10);
+  EXPECT_DOUBLE_EQ(drive_scale(0, 0, 0, .68, .64, .12, 8), 1.0);
+}

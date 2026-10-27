@@ -1,5 +1,7 @@
 #pragma once
 #include <cmath>
+#include <algorithm>
+#include <initializer_list>
 
 namespace robom1_control
 {
@@ -20,6 +22,19 @@ inline Wheel inverse(double vx, double vy, double wz, double x, double y,
     speed = -speed;
   }
   return {previous + delta, speed / radius};
+}
+// Common scale keeps all four wheel speeds within their joint velocity rating.
+inline double drive_scale(double vx, double vy, double wz, double wheelbase,
+  double track, double radius, double maximum)
+{
+  double scale = 1.0;
+  for (double x : {-wheelbase/2, wheelbase/2}) {
+    for (double y : {-track/2, track/2}) {
+      const double speed = std::hypot(vx-wz*y, vy+wz*x)/radius;
+      if (speed > maximum) {scale = std::min(scale, maximum/speed);}
+    }
+  }
+  return scale;
 }
 // Exact constant body-twist integration, including simultaneous translation/rotation.
 inline void integrate(double & x, double & y, double & yaw,

@@ -7,8 +7,7 @@ No string deformation, feather orientation, net or chassis contacts are modeled.
 from dataclasses import dataclass
 import math
 import numpy as np
-from robom1_sim.geometry import rotation_up, rotation_z
-from robom1_sim.swing import BACKSWING, FOLLOW_THROUGH, READY
+from robom1_sim.geometry import rotation_up, rotation_z, rotation_rpy
 
 
 @dataclass
@@ -19,6 +18,14 @@ class RacketGeometry:
     reach: float = 0.62
     radius: float = 0.14
     thickness: float = 0.015
+
+    mount_roll: float = 0.0
+    mount_pitch: float = 0.0
+    mount_yaw: float = 0.0
+
+    @property
+    def mount(self):
+        return rotation_rpy([self.mount_roll, self.mount_pitch, self.mount_yaw])
 
     @property
     def pivot(self):
@@ -41,7 +48,7 @@ def flight_step(position, velocity, dt, drag):
 
 def racket_pose(base, yaw, angle, geometry):
     yaw_rotation = rotation_z(yaw)
-    orientation = yaw_rotation @ rotation_up(-angle)
+    orientation = yaw_rotation @ geometry.mount @ rotation_up(-angle)
     pivot = np.asarray(base) + yaw_rotation @ geometry.pivot
     center = pivot + orientation @ np.array([0.0, 0.0, geometry.reach])
     return pivot, center, orientation
@@ -95,7 +102,7 @@ def collide_racket(position, velocity, sphere_radius, base, yaw, angle,
     if contact is None:
         return position, velocity, None
     point, normal, penetration = contact
-    pitch_axis = rotation_z(yaw) @ np.array([0.0, 1.0, 0.0])
+    pitch_axis = rotation_z(yaw) @ geometry.mount @ np.array([0.0, 1.0, 0.0])
     surface_velocity = (np.asarray(base_velocity)
                         + np.cross([0.0, 0.0, yaw_rate], point - base)
                         + np.cross(pitch_axis * pitch_rate, point - pivot))
@@ -136,14 +143,18 @@ def predict_landing(position, velocity, sphere_radius, drag, dt=0.002, horizon=8
     return np.array(points), np.array(times), None
 
 
-def make_impact_feed(base, yaw, geometry, sphere_radius, drag):
+def make_impact_feed(base, yaw, geometry, sphere_radius, drag, swing=None):
     """Aim a test serve at the rising part of a READY->backswing->stroke sequence.
 
     This is a deterministic feed for a STATIONARY base, not an interception planner.
     It does not force a hit: runtime collision detection still decides contact.
     """
-    contact_angle = -0.8
-    target_blend = (contact_angle - BACKSWING) / (FOLLOW_THROUGH - BACKSWING)
+    from robom1_sim.swing import PitchSwing
+    swing = PitchSwing() if swing is None else swing
+    backswing = swing.backswing
+    follow = swing.follow_through
+    contact_angle = backswing + (follow-backswing) * (0.95/3.65)
+    target_blend = (contact_angle - backswing) / (follow - backswing)
     low, high = 0.0, 1.0
     for _ in range(50):
         u = (low + high) / 2
@@ -152,7 +163,7 @@ def make_impact_feed(base, yaw, geometry, sphere_radius, drag):
             low = u
         else:
             high = u
-    contact_time = 0.6 + 0.9 * (low + high) / 2
+    contact_time = swing.duration(swing.position, backswing, swing.preparation_time) + swing.duration(backswing, follow, swing.stroke_time) * (low + high) / 2
     _, center, orientation = racket_pose(base, yaw, contact_angle, geometry)
     position = center + orientation[:, 0] * (sphere_radius + geometry.thickness/2)
     velocity = rotation_z(yaw) @ np.array([-2.0, 0.0, -6.0])

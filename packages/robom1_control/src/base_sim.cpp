@@ -20,6 +20,7 @@ public:
     wheelbase_ = declare_parameter("wheelbase", 0.52);
     track_ = declare_parameter("track", 0.48);
     radius_ = declare_parameter("wheel_radius", 0.09);
+    max_wheel_speed_ = declare_parameter("max_wheel_speed", 40.0);
     max_speed_ = declare_parameter("max_speed", 1.5);
     max_yaw_ = declare_parameter("max_yaw_rate", 1.5);
     acceleration_ = declare_parameter("acceleration", 2.0);
@@ -29,7 +30,7 @@ public:
     y_ = declare_parameter("initial_y", 0.0);
     const double rate = declare_parameter("update_rate", 100.0);
     if (!(wheelbase_ > 0 && track_ > 0 && radius_ > 0 && max_speed_ > 0 &&
-      max_yaw_ > 0 && acceleration_ > 0 && yaw_acceleration_ > 0 && timeout_ > 0 && rate > 0))
+      max_yaw_ > 0 && max_wheel_speed_ > 0 && acceleration_ > 0 && yaw_acceleration_ > 0 && timeout_ > 0 && rate > 0))
     {throw std::invalid_argument("Geometry, rates, and limits must be positive");}
     odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odom", 10);
     joints_pub_ = create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
@@ -67,6 +68,11 @@ private:
     velocity_.linear.y += dy * scale;
     velocity_.angular.z += std::clamp(target_.angular.z - velocity_.angular.z,
       -yaw_acceleration_ * dt, yaw_acceleration_ * dt);
+    const double drive_scale = robom1_control::drive_scale(velocity_.linear.x, velocity_.linear.y,
+      velocity_.angular.z, wheelbase_, track_, radius_, max_wheel_speed_);
+    velocity_.linear.x *= drive_scale;
+    velocity_.linear.y *= drive_scale;
+    velocity_.angular.z *= drive_scale;
     robom1_control::integrate(x_, y_, yaw_, velocity_.linear.x, velocity_.linear.y,
       velocity_.angular.z, dt);
     nav_msgs::msg::Odometry odom;
@@ -103,7 +109,7 @@ private:
     }
     joints_pub_->publish(joints);
   }
-  double wheelbase_, track_, radius_, max_speed_, max_yaw_, acceleration_, yaw_acceleration_, timeout_;
+  double wheelbase_, track_, radius_, max_wheel_speed_, max_speed_, max_yaw_, acceleration_, yaw_acceleration_, timeout_;
   double x_, y_, yaw_{0};
   std::array<double, 4> steering_{}, rotation_{};
   geometry_msgs::msg::Twist target_, velocity_;

@@ -8,6 +8,14 @@ def rotation_z(yaw):
     return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
+def rotation_rpy(rpy):
+    """URDF fixed-axis roll/pitch/yaw: Rz(yaw) Ry(pitch) Rx(roll)."""
+    roll, pitch, yaw = rpy
+    c, s = math.cos(roll), math.sin(roll)
+    rx = np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
+    return rotation_z(yaw) @ rotation_up(-pitch) @ rx
+
+
 def rotation_up(pitch):
     c, s = math.cos(pitch), math.sin(pitch)
     return np.array([[c, 0.0, -s], [0.0, 1.0, 0.0], [s, 0.0, c]])
@@ -32,7 +40,7 @@ def sphere_ranges(origin, directions, center, radius):
     return np.where((discriminant >= 0) & (distance > 0), distance, np.inf)
 
 
-def scan_scene(origin, directions, shuttle, radius, maximum):
+def scan_scene(origin, directions, shuttle, radius, maximum, minimum=0.05):
     """Shuttle sphere, ground and four enclosing walls (not the court net)."""
     ranges = sphere_ranges(origin, directions, shuttle, radius)
     # Enclosure is x=[-1,14.4], y=[-4,4], height=4.5m.
@@ -47,4 +55,4 @@ def scan_scene(origin, directions, shuttle, radius, maximum):
             valid = ((distance > 0) & (hit[:, 2] >= 0) & (hit[:, 2] <= 4.5)
                      & (hit[:, other] >= lower) & (hit[:, other] <= upper))
             ranges = np.minimum(ranges, np.where(valid, distance, np.inf))
-    return np.where((ranges >= 0.05) & (ranges <= maximum), ranges, np.inf)
+    return np.where((ranges >= minimum) & (ranges <= maximum), ranges, np.inf)

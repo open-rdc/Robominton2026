@@ -1,0 +1,80 @@
+# SI units: m, kg, rad, rad/s, N*m. Mount poses are in base_footprint.
+# Nominal design values, not measured hardware specifications.
+chassis:
+  size: [0.64, 0.44, 0.16]  # x forward, y left, z up
+  center_z: 0.22
+  mass: 18.0
+wheels:
+  wheelbase: 0.52
+  track: 0.48
+  radius: 0.09
+  width: 0.045
+  mass: 0.5
+  drive_effort: 20.0
+  drive_velocity: 40.0
+  steer_size: [0.06, 0.06, 0.06]
+  steer_mass: 0.3
+  steer_effort: 20.0
+  steer_velocity: 4.0  # URDF rating; current kinematic steering remains ideal
+  damping: 0.0
+  friction: 0.0
+mast:
+  size: [0.05, 0.05, 0.7]
+  xyz: [0.0, 0.0, 0.65]
+  mass: 1.0
+camera:
+  size: [0.06, 0.10, 0.04]
+  xyz: [0.12, 0.0, 1.0]
+  rpy: [0.0, 0.0, 0.0]  # camera_link: +x forward; optical frame is derived
+  mass: 0.1
+  width: 320
+  height: 240
+  fx: 220.0
+  fy: 220.0
+  cx: 160.0
+  cy: 120.0
+  rate: 10.0
+lidar:
+  size: [0.07, 0.07, 0.06]
+  xyz: [0.18, 0.0, 0.9]
+  rpy: [0.0, 0.0, 0.0]  # mount rotation before pitch rotation about local -y
+  mass: 0.2
+  lower: -0.6
+  upper: 1.2
+  initial: 0.0
+  effort: 4.0
+  velocity: 1.5
+  damping: 0.0
+  friction: 0.0
+  angle_min: -3.141592653589793
+  angle_max: 3.141592653589793
+  samples: 1441
+  range_min: 0.05
+  range_max: 20.0
+  rate: 10.0
+racket:
+  pivot: [0.05, -0.36, 1.05]
+  rpy: [0.0, 0.0, 0.0]  # fixed mount rotation, then local +y swing
+  handle_length: 0.5
+  handle_width: 0.025
+  handle_mass: 0.1
+  grip_length: 0.12
+  grip_width: 0.04
+  reach: 0.62  # grip-end pivot to head center
+  radius: 0.14
+  thickness: 0.015
+  head_mass: 0.08
+  lower: -1.8
+  upper: 2.0
+  effort: 10.0
+  velocity: 8.0
+  damping: 0.0
+  friction: 0.0
+  ready: -0.35
+  backswing: -1.75
+  follow_through: 1.9
+  manual_velocity: 4.0
+  preparation_time: 0.6
+  stroke_time: 0.9
+  hold_time: 0.25
+  return_time: 0.95

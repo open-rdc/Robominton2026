@@ -28,12 +28,12 @@ Ubuntuでxauthだけ不足する場合は `sudo apt install xauth` で導入で�
 ```bash
 mkdir -p ~/robominton_2026_ws/src
 cd ~/robominton_2026_ws/src
-git clone --branch sim/robom1-integration --single-branch https://github.com/open-rdc/Robominton2026.git
+git clone --branch dev/robot-description-parameters --single-branch https://github.com/open-rdc/Robominton2026.git
 cd Robominton2026
 git branch --show-current
 ```
 
-`sim/robom1-integration` と表示されることを確認します。
+`dev/robot-description-parameters` と表示されることを確認します。
 すでにリポジトリがある場合は重ねてcloneせず、変更を確認してからこのブランチへ切り替えてください。
 
 ```bash
@@ -46,7 +46,7 @@ bash scripts/foxy.sh smoke
 
 `image` はUbuntu 20.04 / Foxyと依存ツールを構築します。初回はネット接続が必要です。
 `build` はソースをコンパイルします。ホストにROSがなくても構いません。
-スモークテストでは、デモ・手動・目標追従・衝突の4件の `PASS` が出れば成功です。
+スモークテストでは、デモ・手動・目標追従・衝突・別機体設定の5件の `PASS` が出れば成功です。
 
 ## RVizで確認する
 
@@ -133,7 +133,7 @@ Dockerfileやイメージ内の依存パッケージを変更した場合は、�
 
 ```bash
 git status
-git pull --ff-only origin sim/robom1-integration
+git pull --ff-only origin dev/robot-description-parameters
 bash scripts/foxy.sh image
 bash scripts/foxy.sh build
 bash scripts/foxy.sh smoke
@@ -167,7 +167,9 @@ Foxy用ボリューム名は `robominton2026-foxy_foxy_build`、`..._foxy_instal
 ## 実機と検証範囲
 
 Foxyはサポート終了済みで、既存Jetsonへの互換性確認に使います。
-開発PC（amd64）でビルド・単体テスト・4モードのスモークテストとGUIのウィンドウ起動を確認済みです。
+開発PC（amd64）でビルド・単体テスト・5モードのスモークテストとGUIのウィンドウ起動を確認済みです。
 Jetson（arm64）のGPU・CSIカメラ・USB・CANなどは機種とJetPackに合わせた追加設定が必要です。
 この開発用設定では実機デバイスやホストネットワークを割り当てていません。
 ROS_DOMAIN_IDの初期値は87、通信はコンテナ内のローカルに限定します。
+
+機体の寸法・取り付け・関節制限は [機体モデルの設定](robot_parameters.md) を参照してください。

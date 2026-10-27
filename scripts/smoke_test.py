@@ -21,9 +21,16 @@ from sensor_msgs.msg import CameraInfo, Image, JointState, LaserScan
 from std_msgs.msg import Float64, Int32
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
+from ament_index_python.packages import get_package_share_directory
+from robom1_sim.robot_config import load_robot_config
+from robom1_sim.geometry import rotation_rpy, rotation_up
+import numpy as np
 
 
 def run_case(mode):
+    description = Path(get_package_share_directory('robom1_description'))
+    design_path = description/'config'/('robot_large.example.yaml' if mode == 'configured' else 'robot.yaml')
+    design = load_robot_config(design_path)
     log_path = Path(os.environ['ROS_LOG_DIR']) / (mode + '.log')
     with log_path.open('w') as log:
         process = subprocess.Popen(
@@ -32,7 +39,8 @@ def run_case(mode):
             ['ros2', 'launch', '--noninteractive', 'robom1_bringup', 'sim.launch.py', 'rviz:=false',
              'demo:=' + ('true' if mode == 'demo' else 'false'),
              'follow_goal:=' + ('true' if mode == 'goal' else 'false'),
-             'impact_demo:=' + ('true' if mode == 'impact' else 'false')],
+             'impact_demo:=' + ('true' if mode == 'impact' else 'false'),
+             'robot_config:=' + str(design_path)],
             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
             start_new_session=True)
         node = rclpy.create_node('robom1_smoke_' + mode)
@@ -85,14 +93,38 @@ def run_case(mode):
             assert set(received) == {'odom', 'scan', 'image', 'info', 'shuttle'}, received.keys()
             assert len(joints) == 10, joints
             scan, image = received['scan'], received['image']
-            assert len(scan.ranges) == 1441 and any(math.isfinite(v) for v in scan.ranges)
-            assert len(image.data) == image.height * image.step == 320 * 240 * 3
+            assert len(scan.ranges) == design['lidar']['samples'] and any(math.isfinite(v) for v in scan.ranges)
+            assert len(image.data) == image.height * image.step == design['camera']['width'] * design['camera']['height'] * 3
             assert image.header.frame_id == 'camera_optical_frame'
-            assert received['info'].k[0] == 220.0
+            assert received['info'].k[0] == design['camera']['fx']
+            assert received['info'].k[4] == design['camera']['fy']
+            assert abs(scan.range_min-design['lidar']['range_min']) < 1e-6
+            assert abs(scan.angle_min-design['lidar']['angle_min']) < 1e-6
             assert buffer.can_transform('odom', 'camera_optical_frame', rclpy.time.Time())
             transform = buffer.lookup_transform('base_footprint', 'lidar_link', rclpy.time.Time())
-            assert abs(transform.transform.translation.z - 0.9) < 1e-6
-            if mode == 'impact':
+            assert abs(transform.transform.translation.z - design['lidar']['xyz'][2]) < 1e-6
+            if mode == 'configured':
+                assert abs(joints['racket_swing_joint']-design['racket']['ready']) < 1e-6
+                def check_mount(frame, xyz, expected_rotation):
+                    transform = buffer.lookup_transform('base_footprint', frame, rclpy.time.Time())
+                    point = transform.transform.translation
+                    np.testing.assert_allclose([point.x,point.y,point.z],xyz,atol=1e-6)
+                    q = transform.transform.rotation
+                    matrix = np.array([
+                        [1-2*(q.y*q.y+q.z*q.z),2*(q.x*q.y-q.z*q.w),2*(q.x*q.z+q.y*q.w)],
+                        [2*(q.x*q.y+q.z*q.w),1-2*(q.x*q.x+q.z*q.z),2*(q.y*q.z-q.x*q.w)],
+                        [2*(q.x*q.z-q.y*q.w),2*(q.y*q.z+q.x*q.w),1-2*(q.x*q.x+q.y*q.y)]])
+                    np.testing.assert_allclose(matrix,expected_rotation,atol=1e-6)
+                check_mount('camera_link',design['camera']['xyz'],rotation_rpy(design['camera']['rpy']))
+                check_mount('lidar_link',design['lidar']['xyz'],
+                            rotation_rpy(design['lidar']['rpy']) @ rotation_up(design['lidar']['initial']))
+                pitch = node.create_publisher(Float64,'lidar_pitch/command',10)
+                spin(.3)
+                spin(1.3,lambda: pitch.publish(Float64(data=100.)))
+                assert abs(joints['lidar_pitch_joint']-design['lidar']['upper']) < .005
+                spin(1.9,lambda: pitch.publish(Float64(data=-100.)))
+                assert abs(joints['lidar_pitch_joint']-design['lidar']['lower']) < .005
+            elif mode == 'impact':
                 assert set(impact_received) == {'count', 'outgoing', 'path', 'predicted', 'actual'}, impact_received.keys()
                 assert impact_received['count'].data == 1
                 assert abs(positions[-1][0]-1.0) < .01 and abs(positions[-1][1]) < .01
@@ -183,7 +215,7 @@ def run_case(mode):
 if __name__ == '__main__':
     rclpy.init()
     try:
-        for case in ['demo', 'manual', 'goal', 'impact']:
+        for case in ['demo', 'manual', 'goal', 'impact', 'configured']:
             run_case(case)
         print('Logs:', os.environ['ROS_LOG_DIR'])
     finally:

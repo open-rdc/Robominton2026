@@ -13,10 +13,10 @@ from std_msgs.msg import Float64, Int32
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker, MarkerArray
 
-from robom1_sim.swing import LOWER, UPPER, READY, MAX_SPEED, PitchSwing
+from robom1_sim.swing import PitchSwing
 from robom1_sim.physics import (RacketGeometry, collide_racket, flight_step,
-                               make_impact_feed, predict_landing)
-from robom1_sim.geometry import project, rotation_up, rotation_z, scan_scene
+                               make_impact_feed, predict_landing, racket_pose)
+from robom1_sim.geometry import project, rotation_up, rotation_z, rotation_rpy, scan_scene
 
 
 class SceneSim(Node):
@@ -41,6 +41,20 @@ class SceneSim(Node):
         self.radius = float(self.declare_parameter('shuttle_radius', 0.035).value)
         if self.period <= 0 or self.drag < 0 or self.radius <= 0:
             raise ValueError('serve_period/radius must be positive and drag nonnegative')
+        self.camera = {}
+        self.lidar = {}
+        camera_defaults = dict(xyz=[0.12, 0.0, 1.0], rpy=[0.0, 0.0, 0.0], width=320,
+                               height=240, fx=220.0, fy=220.0, cx=160.0, cy=120.0, rate=10.0)
+        lidar_defaults = dict(xyz=[0.18, 0.0, 0.9], rpy=[0.0, 0.0, 0.0], lower=-0.6,
+                              upper=1.2, initial=0.0, velocity=1.5, angle_min=-math.pi,
+                              angle_max=math.pi, samples=1441, range_min=0.05, range_max=20.0, rate=10.0)
+        for name, defaults, target in [('camera', camera_defaults, self.camera),
+                                       ('lidar', lidar_defaults, self.lidar)]:
+            for key, default in defaults.items():
+                target[key] = self.declare_parameter(name+'_'+key, default).value
+        self.camera_mount = rotation_rpy(self.camera['rpy'])
+        self.lidar_mount = rotation_rpy(self.lidar['rpy'])
+        self.camera_age = self.scan_age = 0.0
         self.base = np.array([1.0, 0.0, 0.0])
         self.yaw = 0.0
         self.have_odom = False
@@ -48,9 +62,16 @@ class SceneSim(Node):
         self.yaw_rate = 0.0
         self.previous_base = self.base.copy()
         self.previous_yaw = self.yaw
-        self.pitch = self.pitch_target = 0.0
-        self.swing = self.swing_target = READY
-        self.stroke = PitchSwing()
+        defaults = PitchSwing()
+        swing_defaults = dict(lower=defaults.lower, upper=defaults.upper, ready=defaults.ready,
+                              backswing=defaults.backswing, follow_through=defaults.follow_through,
+                              velocity=defaults.max_speed, manual_velocity=defaults.manual_velocity,
+                              preparation_time=defaults.preparation_time, stroke_time=defaults.stroke_time,
+                              hold_time=defaults.hold_time, return_time=defaults.return_time)
+        self.stroke = PitchSwing(**{key: float(self.declare_parameter('swing_'+key, value).value)
+                                    for key, value in swing_defaults.items()})
+        self.pitch = self.pitch_target = self.lidar['initial']
+        self.swing = self.swing_target = self.stroke.ready
         self.auto_swung = False
         self.age = self.output_age = 0.0
         self.serve_count = 0
@@ -78,8 +99,8 @@ class SceneSim(Node):
         self.scan_pub = self.create_publisher(LaserScan, 'scan', qos_profile_sensor_data)
         self.image_pub = self.create_publisher(Image, 'camera/image_raw', qos_profile_sensor_data)
         self.info_pub = self.create_publisher(CameraInfo, 'camera/camera_info', qos_profile_sensor_data)
-        self.angles = np.linspace(-math.pi, math.pi, 1441)
-        self.rays = np.column_stack((np.cos(self.angles), np.sin(self.angles), np.zeros(1441)))
+        self.angles = np.linspace(self.lidar['angle_min'], self.lidar['angle_max'], self.lidar['samples'])
+        self.rays = np.column_stack((np.cos(self.angles), np.sin(self.angles), np.zeros(len(self.angles))))
         self.create_timer(0.02, self.step)
         self.get_logger().info('Sensors and moving-racket collision ready; predictions use simplified drag.')
 
@@ -100,7 +121,7 @@ class SceneSim(Node):
 
     def on_pitch(self, msg):
         if math.isfinite(msg.data):
-            self.pitch_target = float(np.clip(msg.data, -0.6, 1.2))
+            self.pitch_target = float(np.clip(msg.data, self.lidar['lower'], self.lidar['upper']))
             # A manual pitch command takes over from automatic demo aiming.
             self.demo_aim = False
 
@@ -108,7 +129,7 @@ class SceneSim(Node):
         if math.isfinite(msg.data):
             self.demo_swing = False
             self.stroke.cancel(self.swing)
-            self.swing_target = float(np.clip(msg.data, LOWER, UPPER))
+            self.swing_target = float(np.clip(msg.data, self.stroke.lower, self.stroke.upper))
 
     def on_trigger_swing(self, request, response):
         del request
@@ -132,10 +153,10 @@ class SceneSim(Node):
         self.impact_speed = 0.0
         self.flight_history = [self.shuttle.copy()]
         if (self.impact_demo or force_feed) and self.have_odom:
-            self.stroke.cancel(READY)
-            self.swing = self.swing_target = READY
+            self.stroke.cancel(self.stroke.ready)
+            self.swing = self.swing_target = self.stroke.ready
             self.shuttle[:], self.velocity[:] = make_impact_feed(
-                self.base, self.yaw, self.racket, self.radius, self.drag)
+                self.base, self.yaw, self.racket, self.radius, self.drag, self.stroke)
             self.flight_history = [self.shuttle.copy()]
             self.stroke.trigger()
             self.auto_swung = True
@@ -177,7 +198,7 @@ class SceneSim(Node):
         # Resolve both flight and moving-racket contact in small steps. Limit the
         # relative travel to 0.4 sphere radii to avoid crossing the thin face unseen.
         relative_speed = (np.linalg.norm(self.velocity) + np.linalg.norm(self.base_velocity)
-                          + MAX_SPEED * self.racket.reach
+                          + self.stroke.max_speed * self.racket.reach
                           + abs(self.yaw_rate) * (np.linalg.norm(self.racket.pivot) + self.racket.reach))
         max_step = min(0.002, 0.4 * self.radius / max(1.0, relative_speed))
         count = max(1, math.ceil(dt / max_step))
@@ -189,7 +210,7 @@ class SceneSim(Node):
                 self.swing = self.stroke.step(h)
                 self.swing_target = self.swing
             else:
-                self.swing += float(np.clip(self.swing_target-self.swing, -4.0*h, 4.0*h))
+                self.swing += float(np.clip(self.swing_target-self.swing, -self.stroke.manual_velocity*h, self.stroke.manual_velocity*h))
                 self.stroke.position = self.swing
             pitch_rate = (self.swing - previous_swing) / h
             if self.shuttle[2] <= self.radius:
@@ -217,9 +238,9 @@ class SceneSim(Node):
         self.previous_yaw = self.yaw
         rotation = rotation_z(self.yaw)
         if self.demo_aim:
-            local = rotation.T @ (self.shuttle - self.base) - np.array([0.18, 0.0, 0.9])
-            self.pitch_target = float(np.clip(math.atan2(local[2], local[0]), -0.6, 1.2))
-        self.pitch += float(np.clip(self.pitch_target - self.pitch, -1.5*dt, 1.5*dt))
+            local = self.lidar_mount.T @ (rotation.T @ (self.shuttle-self.base) - self.lidar['xyz'])
+            self.pitch_target = float(np.clip(math.atan2(local[2], local[0]), self.lidar['lower'], self.lidar['upper']))
+        self.pitch += float(np.clip(self.pitch_target - self.pitch, -self.lidar['velocity']*dt, self.lidar['velocity']*dt))
         stamp = now.to_msg()
         joints = JointState()
         joints.header.stamp = stamp
@@ -235,11 +256,17 @@ class SceneSim(Node):
         speed.vector.x, speed.vector.y, speed.vector.z = map(float, self.velocity)
         self.velocity_pub.publish(speed)
         self.hit_count_pub.publish(Int32(data=self.hit_count))
+        self.camera_age += dt
+        self.scan_age += dt
+        if self.camera_age >= 1.0/self.camera['rate']:
+            self.camera_age %= 1.0/self.camera['rate']
+            self.publish_camera(stamp, rotation)
+        if self.scan_age >= 1.0/self.lidar['rate']:
+            self.scan_age %= 1.0/self.lidar['rate']
+            self.publish_scan(stamp, rotation)
         self.output_age += dt
         if self.output_age >= 0.1:
             self.output_age %= 0.1
-            self.publish_scan(stamp, rotation)
-            self.publish_camera(stamp, rotation)
             self.flight_history.append(self.shuttle.copy())
             self.publish_markers(stamp)
 
@@ -284,29 +311,29 @@ class SceneSim(Node):
                 np.round(self.predicted_landing, 3).tolist() if self.predicted_landing is not None else 'outside horizon'))
 
     def publish_scan(self, stamp, rotation):
-        origin = self.base + rotation @ np.array([0.18, 0.0, 0.9])
-        directions = self.rays @ (rotation @ rotation_up(self.pitch)).T
-        ranges = scan_scene(origin, directions, self.shuttle, self.radius, 20.0)
+        origin = self.base + rotation @ np.asarray(self.lidar['xyz'])
+        directions = self.rays @ (rotation @ self.lidar_mount @ rotation_up(self.pitch)).T
+        ranges = scan_scene(origin, directions, self.shuttle, self.radius, self.lidar['range_max'], self.lidar['range_min'])
         scan = LaserScan()
         scan.header.stamp, scan.header.frame_id = stamp, 'lidar_link'
-        scan.angle_min, scan.angle_max = -math.pi, math.pi
-        scan.angle_increment = 2 * math.pi / (len(self.angles) - 1)
-        scan.scan_time, scan.time_increment = 0.1, 0.0  # instantaneous scan, no rolling acquisition
-        scan.range_min, scan.range_max = 0.05, 20.0
+        scan.angle_min, scan.angle_max = self.lidar['angle_min'], self.lidar['angle_max']
+        scan.angle_increment = (self.lidar['angle_max']-self.lidar['angle_min']) / (len(self.angles)-1)
+        scan.scan_time, scan.time_increment = 1.0/self.lidar['rate'], 0.0  # instantaneous scan, no rolling acquisition
+        scan.range_min, scan.range_max = self.lidar['range_min'], self.lidar['range_max']
         scan.ranges = ranges.astype(np.float32).tolist()
         self.scan_pub.publish(scan)
 
     def publish_camera(self, stamp, rotation):
-        width, height, focal = 320, 240, 220.0
-        cx, cy = width / 2, height / 2
-        origin = self.base + rotation @ np.array([0.12, 0.0, 1.0])
-        local = rotation.T @ (self.shuttle - origin)
+        width, height = self.camera['width'], self.camera['height']
+        fx, fy, cx, cy = [self.camera[key] for key in ['fx', 'fy', 'cx', 'cy']]
+        origin = self.base + rotation @ np.asarray(self.camera['xyz'])
+        local = self.camera_mount.T @ rotation.T @ (self.shuttle - origin)
         frame = np.full((height, width, 3), (35, 45, 25), dtype=np.uint8)
         # Synthetic pinhole image of the shuttle only; no real image recognition here.
-        pixel = project(local, focal, focal, cx, cy)
+        pixel = project(local, fx, fy, cx, cy)
         if pixel is not None:
             u, v = pixel
-            radius = max(1, int(focal * self.radius / local[0]))
+            radius = max(1, int(min(fx, fy) * self.radius / local[0]))
             if -radius <= u < width + radius and -radius <= v < height + radius:
                 cv2.circle(frame, (int(round(float(u))), int(round(float(v)))), radius, (245, 245, 245), -1)
         image = Image()
@@ -319,9 +346,9 @@ class SceneSim(Node):
         info.header = image.header
         info.height, info.width = height, width
         info.distortion_model, info.d = 'plumb_bob', [0.0] * 5
-        info.k = [focal, 0.0, cx, 0.0, focal, cy, 0.0, 0.0, 1.0]
+        info.k = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
         info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-        info.p = [focal, 0.0, cx, 0.0, 0.0, focal, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
+        info.p = [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
         self.info_pub.publish(info)
 
     def publish_markers(self, stamp):
@@ -358,10 +385,9 @@ class SceneSim(Node):
         # Head-center arc in the moving base frame, matching the grip-end URDF pivot.
         arc = marker(7, Marker.LINE_STRIP, (0, 0, 0), (0.012, 0, 0), (0.1, 0.9, 1, 0.65))
         arc.header.frame_id = 'base_footprint'
-        for angle in np.linspace(-1.75, 1.9, 81):
-            arc.points.append(Point(x=float(self.racket.pivot_x + self.racket.reach*math.sin(angle)),
-                                    y=float(self.racket.pivot_y),
-                                    z=float(self.racket.pivot_z + self.racket.reach*math.cos(angle))))
+        for angle in np.linspace(self.stroke.backswing, self.stroke.follow_through, 81):
+            _, center, _ = racket_pose(np.zeros(3), 0.0, angle, self.racket)
+            arc.points.append(Point(x=float(center[0]), y=float(center[1]), z=float(center[2])))
         history = marker(8, Marker.LINE_STRIP, (0, 0, 0), (0.018, 0, 0), (0.2, 0.5, 1, 1))
         history.points = [Point(x=float(p[0]), y=float(p[1]), z=float(p[2])) for p in self.flight_history]
         if self.prediction is not None:

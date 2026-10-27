@@ -2,6 +2,7 @@
 
 最初の環境構築・チーム共有手順は [Foxy Dockerの使い方](docker_foxy.md) を参照してください。
 
+- [robot_parameters.md](robot_parameters.md): 機体寸法・質量・センサ配置・関節制限の設定。
 - [simulation.md](simulation.md): sim起動・手動操作・トピック・制約。
 - [original_readme.md](original_readme.md): 友人のリポジトリの元のREADME。
 - `specification.md`（今後追加）: 台車寸法、センサ仕様、座標系、速度上限、通信仕様。

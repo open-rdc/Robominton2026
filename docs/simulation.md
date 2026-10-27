@@ -151,12 +151,13 @@ LiDARは `lidar_link` のxy面を走査します。ピッチはURDFの負のy軸
 
 ## 寸法・制御の変更
 
-- `robom1_bringup/config/sim.yaml`: ホイールベース、トレッド、車輪半径、速度・加速度、投射周期など。
-- `robom1_description/urdf/robom1.urdf.xacro`: 外形、質量、センサ取り付け位置、ラケット形状。
-- `robom1_sim/robom1_sim/scene.py`: センサ位置、画像仕様、仮想シャトル初期条件。
+- `robom1_description/config/robot.yaml`: 機体寸法、センサ仕様、取り付け位置・姿勢、関節制限。
+- `robom1_bringup/config/sim.yaml`: 台車の速度・加速度、初期位置、投射周期などの実験条件。
+- `robom1_description/urdf/robom1.urdf.xacro`: 共通YAMLからリンク・関節・慣性を生成するモデル定義。
+- `robom1_sim/robom1_sim/scene.py`: 仮想センサ・シャトル・衝突の更新処理。
 
 車輪の3寸法はlaunchでURDFとC++へ同じ値を渡しています。
-**センサ取り付け位置・関節限界を変更する際はURDFと `scene.py` の両方を合わせてください。**
+**センサ位置・関節制限は `robot.yaml` の変更をURDFとsimへ共通適用します。** 詳細は [機体モデルの設定](robot_parameters.md)。
 センサの初期取り付け位置はbase_footprint基準で、カメラ(0.12, 0, 1.0)、LiDAR(0.18, 0, 0.9) m。
 台車の操舵は瞬時に理想角へ追従します。実際の操舵遅れ、タイヤ摩擦、モータトルクは未実装です。
 URDFの慣性・collision形状は将来の物理sim用の仮値で、今の台車simには作用しません。
@@ -198,7 +199,7 @@ python3 src/Robominton2026/scripts/smoke_test.py
 
 単体テストは車輪速度の再構成・操舵の反転最適化・台車運動積分・カメラ投影・
 LiDAR走査面とシャトルの交差・遮蔽を確認します。
-スモークテストはGUIなしでデモ／手動／目標追従／衝突の4モードを起動し、TF、センサ配信、
+スモークテストはGUIなしでデモ／手動／目標追従／衝突／別機体設定の5モードを起動し、TF、センサ配信、
 横移動、旋回、指令タイムアウト停止、関節指令、シャトル再投射を検証します。
 テスト専用のROS_DOMAIN_ID=87とROS_LOCALHOST_ONLY=1を使い、終了時に起動したノードを停止します。
 
@@ -288,11 +289,11 @@ v_out = v_in - (1 + e) * dot(v_in - u, n) * n
 ros2 service call /shuttle/feed_to_racket std_srvs/srv/Trigger "{}"
 ```
 
-調整箇所は `robom1_bringup/config/sim.yaml` の `scene_sim.ros__parameters` です。
+反発係数・空気抵抗の調整箇所は `robom1_bringup/config/sim.yaml` の `scene_sim.ros__parameters` です。
 `racket_restitution` は0～1（初期値0.8）、`shuttle_drag` は初期値0.12です。
 これらは実測同定していない仮値で、現実の飛行や打撃の精度を保証しません。
-`racket_pivot_*`、`racket_reach`、`racket_radius`、`racket_thickness` は
-launchでURDFと衝突計算へ同じ値を渡します。支点高さはbase_footprint基準です。
+ラケット寸法・支点・固定取り付け姿勢は `robom1_description/config/robot.yaml` の
+`racket` グループからURDFと衝突計算へ同じ値を渡します。支点高さはbase_footprint基準です。
 
 羽根の姿勢、シャフト・ガットの変形、ネット・壁・台車との衝突、モータ負荷は未実装です。
 特にネットは表示のみなので、予測がネットを越えるかどうかの競技判定には使えません。

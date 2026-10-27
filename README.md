@@ -17,6 +17,15 @@ Ubuntu 20.04 / ROS 2 FoxyによるDocker開発環境を提供しています。
 
 シミュレーションのモデルと制約は [シミュレーション仕様](docs/simulation.md) を参照してください。
 
+## 機体仕様の設定
+
+この開発ブランチ `dev/robot-description-parameters` は、共有済みsimを起点に
+URDFとシミュレーションの設定を共通化しています。
+寸法・質量・センサ取り付け姿勢・関節制限は
+[`robot.yaml`](packages/robom1_description/config/robot.yaml) で設定します。
+変更はURDF・仮想センサ・ラケット衝突へ同じ値で適用します。
+設定項目、反映範囲、切り替え方法は [機体モデルの設定](docs/robot_parameters.md) を参照してください。
+
 ## 必要環境
 
 | 項目 | 要件 |
@@ -39,7 +48,7 @@ Jetson実機の対応状況は「検証範囲と制約」を参照してくだ�
 ```bash
 mkdir -p ~/robominton_2026_ws/src
 cd ~/robominton_2026_ws/src
-git clone --branch sim/robom1-integration --single-branch https://github.com/open-rdc/Robominton2026.git
+git clone --branch dev/robot-description-parameters --single-branch https://github.com/open-rdc/Robominton2026.git
 cd Robominton2026
 ```
 
@@ -104,7 +113,7 @@ Dockerfileやコンテナ内の依存パッケージを変更した場合は、�
 | `bash scripts/foxy.sh smoke` | ROSノード間の通信・動作・終了処理の検証 |
 | `bash scripts/foxy.sh shell` | Foxy環境の対話シェル起動。終了は `exit` |
 
-スモークテストは、自動追従・手動操作・目標位置への追従・ラケット衝突の4モードを検証します。
+スモークテストは、自動追従・手動操作・目標位置への追従・ラケット衝突・別機体設定の5モードを検証します。
 
 Foxyのビルド成果物は、`/ws/build`・`/ws/install`・`/ws/log` に対応するDocker専用ボリュームに保存します。
 ホスト側のHumble用成果物とは分離しています。Gitではソースと環境構築設定を管理します。
@@ -157,7 +166,7 @@ ros2 launch robom1_bringup sim.launch.py impact_demo:=true
 ## 検証範囲と制約
 
 開発PC（amd64）のFoxy Docker環境で、5パッケージのビルド、単体テスト、
-4モードのスモークテストを確認しています。GUIはウィンドウの起動を確認済みです。
+5モードのスモークテストを確認しています。GUIはウィンドウの起動を確認済みです。
 既存パッケージの著作権検査1件はスキップされています。
 
 - 台車は理想運動学モデルであり、タイヤの滑りやモータ負荷は扱いません。
@@ -168,6 +177,7 @@ ros2 launch robom1_bringup sim.launch.py impact_demo:=true
 
 ## 関連ドキュメント
 
+- [機体モデルの設定](docs/robot_parameters.md)：寸法・質量・センサ配置・関節制限
 - [Docker開発環境](docs/docker_foxy.md)：環境構築、操作、更新、トラブル対処
 - [シミュレーション仕様](docs/simulation.md)：モデル、トピック、制御指令、衝突・軌道予測
 - [設計資料](docs/README.md)：機体仕様、配線、担当分担の資料構成

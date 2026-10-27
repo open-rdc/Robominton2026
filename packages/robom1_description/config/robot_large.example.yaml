@@ -1,0 +1,115 @@
+# Example design for parameter integration tests, not a validated real robot.
+chassis:
+  size:
+  - 0.82
+  - 0.54
+  - 0.2
+  center_z: 0.3
+  mass: 24.0
+wheels:
+  wheelbase: 0.68
+  track: 0.64
+  radius: 0.12
+  width: 0.06
+  mass: 0.8
+  drive_effort: 20.0
+  drive_velocity: 25.0
+  steer_size:
+  - 0.06
+  - 0.06
+  - 0.06
+  steer_mass: 0.3
+  steer_effort: 20.0
+  steer_velocity: 4.0
+  damping: 0.0
+  friction: 0.0
+mast:
+  size:
+  - 0.06
+  - 0.06
+  - 1.0
+  xyz:
+  - -0.05
+  - 0.04
+  - 0.9
+  mass: 1.4
+camera:
+  size:
+  - 0.06
+  - 0.1
+  - 0.04
+  xyz:
+  - 0.15
+  - 0.04
+  - 1.25
+  rpy:
+  - 0.1
+  - -0.15
+  - 0.2
+  mass: 0.1
+  width: 640
+  height: 360
+  fx: 420.0
+  fy: 410.0
+  cx: 320.0
+  cy: 180.0
+  rate: 15.0
+lidar:
+  size:
+  - 0.07
+  - 0.07
+  - 0.06
+  xyz:
+  - 0.22
+  - -0.02
+  - 1.1
+  rpy:
+  - 0.05
+  - -0.1
+  - 0.15
+  mass: 0.2
+  lower: -0.4
+  upper: 0.9
+  initial: 0.2
+  effort: 4.0
+  velocity: 0.8
+  damping: 0.0
+  friction: 0.0
+  angle_min: -1.57
+  angle_max: 1.57
+  samples: 721
+  range_min: 0.1
+  range_max: 12.0
+  rate: 20.0
+racket:
+  pivot:
+  - 0.1
+  - -0.45
+  - 1.2
+  rpy:
+  - 0.05
+  - -0.1
+  - 0.2
+  handle_length: 0.56
+  handle_width: 0.025
+  handle_mass: 0.14
+  grip_length: 0.12
+  grip_width: 0.04
+  reach: 0.72
+  radius: 0.16
+  thickness: 0.02
+  head_mass: 0.1
+  lower: -1.5
+  upper: 1.8
+  effort: 10.0
+  velocity: 5.0
+  damping: 0.0
+  friction: 0.0
+  ready: -0.2
+  backswing: -1.4
+  follow_through: 1.7
+  manual_velocity: 2.5
+  preparation_time: 0.8
+  stroke_time: 1.2
+  hold_time: 0.25
+  return_time: 0.95
